@@ -1,0 +1,325 @@
+Welcome to the process
+
+Heart rate and oxygen leavel monitor
+
+Requirements
+
+1 ) Node MCU
+2 ) Max 30100 spo2 and  Heart rate sensor
+3 ) Uart protocal
+5 ) OLED Display SSD 1306 - Output
+4 ) cirkit Designer(app)
+
+Let's Begin
+
+step 1:
+	Open the chrome and the install the arduino app
+	
+	link : https://support.arduino.cc/hc/en-us/articles/360019833020-Download-and-install-Arduino-IDE
+
+step 2:
+	Open the app
+
+step 3:
+	please visit this website 
+
+	https://anipshah.com.np/
+
+step 4:
+	
+	After that Scroll down the website and then you get the box where you see the Node Mcu Installation.
+
+	Direct Link : https://www.instructables.com/Steps-to-Setup-Arduino-IDE-for-NODEMCU-ESP8266-WiF/
+
+step 5: 
+
+	After that you see the page of the Steps to "Setup Arduino IDE for NODEMCU ESP8266"  Title on that website 
+
+step 6:
+
+	After that you see the Step by step process for doing that process to connect your computer/laptop with the microcontroller
+
+step 7:
+
+	click on the preference by clicking the left corner of the of the Arduino then you see preference 
+
+	Shortcut Key : (ctrl,) [Note : You can also go on it by clicking the ctrl and comma)
+
+step 8:
+
+	After You enter in the Preference you see the option of the ESP8266 Board Manager
+	
+	Then in this option add the editor size font 12 or you can also adjust your font according to your need
+
+step 9:
+	
+	Then in the Compiler Warning inside preference then you just tick down the 
+
+	Verify code after upload
+ 
+	Autosave
+
+step 10:
+
+	In the bottom you see the option of the Additional Boards Manager URL
+
+	in this box just paste this link 
+
+	Link : http://arduino.esp8266.com/stable/package_esp8266com_index.json
+
+
+step 11:
+
+	After that go to the tool and then just click on the 
+	
+	Board Manager and Select Arduino Uno
+
+Step 12:
+	
+	After than In the Column 2nd Option under file U see the Board Manager in this type 
+
+	ESP8266 
+
+	and install this package 
+
+step 13:
+	
+	After that open the tool and then go to the board and select the 
+
+	NodeMCU 1.0 (ESP_12E Module)
+
+step 14:
+
+	After that You should given the code 
+
+
+        You can also access This code From GitHub 
+
+		Link :: GitHub.com/Bimal-18
+
+
+	
+	// max30100 sensor aafno i2c peripherals bata 1.8v current matra dinxa, tyie vayera
+	// yo chai 5v logic vako microcontroller sanga kam gardaina. Which means arduino uno, nano, mega vanda pani 
+	// arduino pro mini ki ta nodemcu use garna parne hunxa yo duitai ko logic 3.3v ko hunxa ani SCL D1 ra SDA D2 nodemcu ko.
+
+	#include <Wire.h>
+	#include "MAX30100_PulseOximeter.h"
+	#include <U8g2lib.h>
+
+	#define REPORTING_PERIOD_MS 1000
+        #define FILTER_SIZE 5
+
+// Initialize the display (for I2C)
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+
+PulseOximeter pox;
+uint32_t tsLastReport = 0;
+float heartRateBuffer[FILTER_SIZE];
+float spo2Buffer[FILTER_SIZE];
+int filterIndex = 0;
+float previousHeartRate = 0;
+float previousSpO2 = 0;
+
+	#define ECG_BUFFER_SIZE 128
+	int ecgBuffer[ECG_BUFFER_SIZE];
+	int ecgIndex = 0;
+
+	void onBeatDetected() {
+    Serial.println("Beat!");
+}
+
+float medianFilter(float *data, int size) {
+    float sorted[size];
+    memcpy(sorted, data, size * sizeof(float)); // yo chai median filter use garera noise reduce gareko.
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = i + 1; j < size; j++) {
+            if (sorted[i] > sorted[j]) {
+                float temp = sorted[i];
+                sorted[i] = sorted[j];
+                sorted[j] = temp;
+            }
+        }
+    }
+    return sorted[size / 2];
+}
+
+float adaptiveFilter(float newValue, float oldValue, float alpha) { // ani adaptive filter chai purano ra naya signal lai blend garera smooth signal read gareko.
+    return (alpha * newValue) + ((1 - alpha) * oldValue);
+}
+
+void setup() {
+    Serial.begin(115200);
+    u8g2.begin();  
+    u8g2.clearBuffer();
+
+    Serial.print("Initializing pulse oximeter...");
+    if (!pox.begin()) {
+        Serial.println("FAILED");
+        for (;;);
+    } else {
+        Serial.println("SUCCESS");
+    }
+
+    pox.setIRLedCurrent(MAX30100_LED_CURR_24MA);  //yo chai current ko vale ko adjust garna parxa 
+    pox.setOnBeatDetectedCallback(onBeatDetected);
+}
+
+void loop() {
+    pox.update();
+
+    float heartRate = pox.getHeartRate();
+    float spo2 = pox.getSpO2();
+
+    ecgBuffer[ecgIndex] = (int)(heartRate * sin(2 * 3.14159 * ecgIndex / ECG_BUFFER_SIZE));
+    ecgIndex = (ecgIndex + 1) % ECG_BUFFER_SIZE;
+
+    u8g2.clearBuffer();
+
+    for (int i = 0; i < ECG_BUFFER_SIZE - 1; i++) {
+        int y1 = map(ecgBuffer[i], 0, 180, 44, 20);
+        int y2 = map(ecgBuffer[(i + 1) % ECG_BUFFER_SIZE], 0, 180, 44, 20);
+        u8g2.drawLine(i, y1, i + 1, y2); 
+    }
+
+    u8g2.setFont(u8g2_font_ncenB08_tr); // Set font for text
+    u8g2.setCursor(0, 10);
+    u8g2.print("BPM: ");
+    u8g2.print(heartRate);
+    u8g2.setCursor(0, 20);
+    u8g2.print("SpO2: ");
+    u8g2.print(spo2);
+
+    u8g2.sendBuffer();  // Refresh the display
+
+    delay(20);  // Adjust for graph speed
+}
+	 
+
+Step 15:
+
+	just copy this code and add this code to your New file that you create 
+
+Step 16:
+
+	After Running your code You see there Many Error Like 
+
+	Error :  MAX30100_PulseOximeter.h this library error
+
+Step 17:
+
+	You Need to install the library in this such as 
+
+	MAX30100 Library
+	U8g2
+	
+	[Note :
+		 Question:
+
+			   How can i know which library should be install
+
+		 Solution :
+
+			   Just copy the Error Inside " " then paste it to the google then you will be able to Know which error Was Occurred
+
+			   And then Just install that Library from the Library inside "Library Manager" Which you can see inside the Arduino app
+
+
+	]
+
+step 19:
+	
+	If this Library can't install at that case you can acess this file through a GitHub Link of Me
+
+	GitHub : GitHub.com/BIMAL-18
+
+
+Step 20:
+
+	After that You see this Message :
+	
+	Screenshot 2024-12-22 180619.png
+	[.Variable and Constants in Ram(global, Static)
+
+
+Step 21:
+
+	After that you have provided the Zip File
+
+	Zip File : CP210x_Windows_Drivers_with_Serial_Enumeration.zip
+
+	You can Also access this file from the GitHub
+
+	GitHub.com/BIMAL-18
+
+Step 22:
+
+	After Extract the Zip file then click on this 
+	
+	and install the application:
+
+
+	CP210xVCPInstaller_x64.exe
+
+	
+Step 23:
+
+	After that You can see at the top Version name "NodeMCU 1.0 (ESP_12E Module)"
+
+	After click on that you can see the option of "Other board and POrts"
+
+	Just click on that 
+	
+	Just connect that port that You have given by sir
+
+step 24:
+
+	After that You can see the Circuit that you have given then just join it and chk
+	
+	[Note : Circuit is also I provided it on Guithub]
+
+	
+Step 25:
+
+	Circuit Drawing 
+
+	For this Install the app Name 
+
+	App Name : Cirkit Designer(app)
+
+	Link : https://www.cirkitdesign.com/download.html
+
+Step 26:
+
+	After that You should Click Create on New File Then :
+
+	1) Node MCU V3 ESP8266
+
+	2) MAX30102 Heart Rate and Oxygen Sensor
+
+		[Note : You can also Get this from the search box type MAX30102]
+	
+	3) 0.96"OLED
+		[Note : You can also get this by just typing "OLED"]
+
+	And connect the wire
+
+Step 27:
+
+	Picture of Circuit I will Upload on GitHub just and see it and join the connection on it
+
+	
+
+
+
+
+ 	
+	
+
+  
+	
+	
+
+
+ 
+
